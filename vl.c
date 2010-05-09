@@ -2597,9 +2597,9 @@ static void numa_add(const char *optarg)
                         fprintf(stderr,
                             "only 63 CPUs in NUMA mode supported.\n");
                     }
-                    value = (1 << (endvalue + 1)) - (1 << value);
+                    value = (2ULL << endvalue) - (1ULL << value);
                 } else {
-                    value = 1 << value;
+                    value = 1ULL << value;
                 }
             }
             node_cpumask[nodenr] = value;
@@ -3514,6 +3514,8 @@ static int cpu_can_run(CPUState *env)
     if (env->stop)
         return 0;
     if (env->stopped)
+        return 0;
+    if (!vm_running)
         return 0;
     return 1;
 }
@@ -4909,7 +4911,7 @@ int main(int argc, char **argv, char **envp)
     const char *gdbstub_dev = NULL;
     uint32_t boot_devices_bitmap = 0;
     int i;
-    int snapshot, linux_boot, net_boot;
+    int snapshot, linux_boot;
     const char *initrd_filename;
     const char *kernel_filename, *kernel_cmdline;
     char boot_devices[33] = "cad"; /* default to HD->floppy->CD-ROM */
@@ -5428,6 +5430,9 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_serial:
                 add_device_config(DEV_SERIAL, optarg);
                 default_serial = 0;
+                if (strncmp(optarg, "mon:", 4) == 0) {
+                    default_monitor = 0;
+                }
                 break;
             case QEMU_OPTION_watchdog:
                 if (watchdog) {
@@ -5446,10 +5451,16 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_virtiocon:
                 add_device_config(DEV_VIRTCON, optarg);
                 default_virtcon = 0;
+                if (strncmp(optarg, "mon:", 4) == 0) {
+                    default_monitor = 0;
+                }
                 break;
             case QEMU_OPTION_parallel:
                 add_device_config(DEV_PARALLEL, optarg);
                 default_parallel = 0;
+                if (strncmp(optarg, "mon:", 4) == 0) {
+                    default_monitor = 0;
+                }
                 break;
 	    case QEMU_OPTION_loadvm:
 		loadvm = optarg;
@@ -5905,6 +5916,12 @@ int main(int argc, char **argv, char **envp)
             fprintf(stderr, "Could not initialize KVM, will disable KVM support\n");
             kvm_allowed = 0;
         }
+    } else {
+        /* without kvm enabled, we can only support 4095 MB RAM */
+        if (ram_size > (4095UL << 20)) {
+            fprintf(stderr, "qemu: without kvm support at most 4095 MB RAM can be simulated\n");
+            exit(1);
+        }
     }
 
     if (qemu_init_main_loop()) {
@@ -5947,9 +5964,6 @@ int main(int argc, char **argv, char **envp)
     if (net_init_clients() < 0) {
         exit(1);
     }
-
-    net_boot = (boot_devices_bitmap >> ('n' - 'a')) & 0xF;
-    net_set_boot_mask(net_boot);
 
     /* init the bluetooth world */
     if (foreach_device_config(DEV_BT, bt_parse))
