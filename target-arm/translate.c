@@ -3539,12 +3539,6 @@ static inline void gen_neon_rsb(int size, TCGv t0, TCGv t1)
 #define gen_helper_neon_pmin_s32  gen_helper_neon_min_s32
 #define gen_helper_neon_pmin_u32  gen_helper_neon_min_u32
 
-/* FIXME: This is wrong.  They set the wrong overflow bit.  */
-#define gen_helper_neon_qadd_s32(a, e, b, c) gen_helper_add_saturate(a, b, c)
-#define gen_helper_neon_qadd_u32(a, e, b, c) gen_helper_add_usaturate(a, b, c)
-#define gen_helper_neon_qsub_s32(a, e, b, c) gen_helper_sub_saturate(a, b, c)
-#define gen_helper_neon_qsub_u32(a, e, b, c) gen_helper_sub_usaturate(a, b, c)
-
 #define GEN_NEON_INTEGER_OP_ENV(name) do { \
     switch ((size << 1) | u) { \
     case 0: \
@@ -4233,16 +4227,20 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                 switch (op) {
                 case 1: /* VQADD */
                     if (u) {
-                        gen_helper_neon_add_saturate_u64(CPU_V001);
+                        gen_helper_neon_qadd_u64(cpu_V0, cpu_env,
+                                                 cpu_V0, cpu_V1);
                     } else {
-                        gen_helper_neon_add_saturate_s64(CPU_V001);
+                        gen_helper_neon_qadd_s64(cpu_V0, cpu_env,
+                                                 cpu_V0, cpu_V1);
                     }
                     break;
                 case 5: /* VQSUB */
                     if (u) {
-                        gen_helper_neon_sub_saturate_u64(CPU_V001);
+                        gen_helper_neon_qsub_u64(cpu_V0, cpu_env,
+                                                 cpu_V0, cpu_V1);
                     } else {
-                        gen_helper_neon_sub_saturate_s64(CPU_V001);
+                        gen_helper_neon_qsub_s64(cpu_V0, cpu_env,
+                                                 cpu_V0, cpu_V1);
                     }
                     break;
                 case 8: /* VSHL */
@@ -4686,7 +4684,7 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                         }
                         if (op == 1 || op == 3) {
                             /* Accumulate.  */
-                            neon_load_reg64(cpu_V0, rd + pass);
+                            neon_load_reg64(cpu_V1, rd + pass);
                             tcg_gen_add_i64(cpu_V0, cpu_V0, cpu_V1);
                         } else if (op == 4 || (op == 5 && u)) {
                             /* Insert */
@@ -4750,7 +4748,7 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                         if (op == 1 || op == 3) {
                             /* Accumulate.  */
                             tmp2 = neon_load_reg(rd, pass);
-                            gen_neon_add(size, tmp2, tmp);
+                            gen_neon_add(size, tmp, tmp2);
                             dead_tmp(tmp2);
                         } else if (op == 4 || (op == 5 && u)) {
                             /* Insert */
