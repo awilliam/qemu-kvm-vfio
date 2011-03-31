@@ -56,7 +56,10 @@ struct PCII440FXState {
 #define I440FX_PAM_SIZE 7
 #define I440FX_SMRAM    0x72
 
+#define PIIX_CONFIG_IRQ_ROUTE 0x60
+
 static void piix3_set_irq(void *opaque, int irq_num, int level);
+static int piix3_get_irq(void *opaque, int irq_num);
 
 /* return the global irq number corresponding to a given device irq
    pin. We could also use the bus number to have a more precise
@@ -239,7 +242,7 @@ PCIBus *i440fx_init(PCII440FXState **pi440fx_state, int *piix3_devfn, qemu_irq *
     piix3 = DO_UPCAST(PIIX3State, dev,
                       pci_create_simple_multifunction(b, -1, true, "PIIX3"));
     piix3->pic = pic;
-    pci_bus_irqs(b, piix3_set_irq, pci_slot_get_pirq, piix3, 4);
+    pci_bus_irqs(b, piix3_set_irq, piix3_get_irq, pci_slot_get_pirq, piix3, 4);
     (*pi440fx_state)->piix3 = piix3;
 
     *piix3_devfn = piix3->dev.devfn;
@@ -265,13 +268,13 @@ static void piix3_set_irq(void *opaque, int irq_num, int level)
 
     /* now we change the pic irq level according to the piix irq mappings */
     /* XXX: optimize */
-    pic_irq = piix3->dev.config[0x60 + irq_num];
+    pic_irq = piix3->dev.config[PIIX_CONFIG_IRQ_ROUTE + irq_num];
     if (pic_irq < 16) {
         /* The pic level is the logical OR of all the PCI irqs mapped
            to it */
         pic_level = 0;
         for (i = 0; i < 4; i++) {
-            if (pic_irq == piix3->dev.config[0x60 + i])
+            if (pic_irq == piix3->dev.config[PIIX_CONFIG_IRQ_ROUTE + i])
                 pic_level |= piix3->pci_irq_levels[i];
         }
         qemu_set_irq(piix3->pic[pic_irq], pic_level);
@@ -281,8 +284,15 @@ static void piix3_set_irq(void *opaque, int irq_num, int level)
 int piix_get_irq(int pin)
 {
     if (piix3_dev)
-        return piix3_dev->dev.config[0x60+pin];
+        return piix3_dev->dev.config[PIIX_CONFIG_IRQ_ROUTE + pin];
     return 0;
+}
+
+static int piix3_get_irq(void *opaque, int irq_num)
+{
+    PIIX3State *piix3 = opaque;
+
+    return piix3->dev.config[PIIX_CONFIG_IRQ_ROUTE + irq_num];
 }
 
 static void piix3_reset(void *opaque)
@@ -323,6 +333,16 @@ static void piix3_reset(void *opaque)
     pci_conf[0xae] = 0x00;
 
     memset(d->pci_irq_levels, 0, sizeof(d->pci_irq_levels));
+    pci_bus_update_irqs(d->dev.bus);
+}
+
+static void piix3_write_config(PCIDevice *dev,
+                               uint32_t address, uint32_t val, int len)
+{
+    pci_default_write_config(dev, address, val, len);
+    if (ranges_overlap(address, len, PIIX_CONFIG_IRQ_ROUTE, 4)) {
+        pci_bus_update_irqs(dev->bus);
+    }
 }
 
 static const VMStateDescription vmstate_piix3 = {
@@ -371,6 +391,7 @@ static PCIDeviceInfo i440fx_info[] = {
         .qdev.no_user = 1,
         .no_hotplug   = 1,
         .init         = piix3_initfn,
+        .config_write = piix3_write_config,
     },{
         /* end of list */
     }
