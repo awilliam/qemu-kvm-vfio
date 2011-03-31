@@ -177,6 +177,7 @@ hw-obj-$(CONFIG_PCI) += msix.o msi.o
 hw-obj-$(CONFIG_PCI) += pci_host.o pcie_host.o
 hw-obj-$(CONFIG_PCI) += ioh3420.o xio3130_upstream.o xio3130_downstream.o
 hw-obj-y += watchdog.o
+hw-obj-y += memory.o
 hw-obj-$(CONFIG_ISA_MMIO) += isa_mmio.o
 hw-obj-$(CONFIG_ECC) += ecc.o
 hw-obj-$(CONFIG_NAND) += nand.o
