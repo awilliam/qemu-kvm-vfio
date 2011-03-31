@@ -93,6 +93,7 @@ struct IOAPICState {
     uint8_t ioregsel;
     uint32_t irr;
     uint64_t ioredtbl[IOAPIC_NUM_PINS];
+    uint32_t gsi_base;
 };
 
 static IOAPICState *ioapics[MAX_IOAPICS];
@@ -413,6 +414,10 @@ static SysBusDeviceInfo ioapic_info = {
     .qdev.vmsd = &vmstate_ioapic,
     .qdev.reset = ioapic_reset,
     .qdev.no_user = 1,
+    .qdev.props = (Property[]) {
+        DEFINE_PROP_UINT32("gsi_base", IOAPICState, gsi_base, 0),
+        DEFINE_PROP_END_OF_LIST(),
+    }
 };
 
 static void ioapic_register_devices(void)
