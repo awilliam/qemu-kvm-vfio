@@ -170,9 +170,15 @@ int msi_init(struct PCIDevice *dev, uint8_t offset,
 
 void msi_uninit(struct PCIDevice *dev)
 {
-    uint16_t flags = pci_get_word(dev->config + msi_flags_off(dev));
-    uint8_t cap_size = msi_cap_sizeof(flags);
+    uint8_t cap_size;
+
+    if (!(dev->cap_present & QEMU_PCI_CAP_MSI))
+        return;
+
+    cap_size = msi_cap_sizeof(pci_get_word(dev->config + msi_flags_off(dev)));
     pci_del_capability(dev, PCI_CAP_ID_MSIX, cap_size);
+    dev->msi_cap = 0;
+    dev->cap_present &= ~QEMU_PCI_CAP_MSI;
     MSI_DEV_PRINTF(dev, "uninit\n");
 }
 
