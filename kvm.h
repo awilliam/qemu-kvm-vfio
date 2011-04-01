@@ -216,6 +216,16 @@ int kvm_set_irqfd(int gsi, int fd, bool assigned)
 }
 #endif
 
+#if defined(KVM_EOI_EVENTFD) && defined(CONFIG_KVM)
+int kvm_eoi_eventfd(int gsi, int fd, uint32_t flags);
+#else
+static inline
+int kvm_eoi_eventfd(int gsi, int fd, uint32_t flags)
+{
+    return -ENOSYS;
+}
+#endif
+
 int kvm_set_ioeventfd_pio_word(int fd, uint16_t adr, uint16_t val, bool assign);
 
 int kvm_has_gsi_routing(void);

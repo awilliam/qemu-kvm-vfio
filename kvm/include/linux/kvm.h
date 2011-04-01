@@ -530,6 +530,7 @@ struct kvm_enable_cap {
 #ifdef __KVM_HAVE_XCRS
 #define KVM_CAP_XCRS 56
 #endif
+#define KVM_CAP_EOI_EVENTFD 60
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
@@ -609,6 +610,15 @@ struct kvm_clock_data {
 	__u32 pad[9];
 };
 
+#define KVM_EOI_EVENTFD_FLAG_DEASSIGN (1 << 0)
+
+struct kvm_eoi {
+       __u32 fd;
+       __u32 gsi;
+       __u32 flags;
+       __u8  pad[20];
+};
+
 /*
  * ioctls for VM fds
  */
@@ -663,6 +673,8 @@ struct kvm_clock_data {
 /* Available with KVM_CAP_PIT_STATE2 */
 #define KVM_GET_PIT2              _IOR(KVMIO,  0x9f, struct kvm_pit_state2)
 #define KVM_SET_PIT2              _IOW(KVMIO,  0xa0, struct kvm_pit_state2)
+/* Available with KVM_CAP_EOI_EVENTFD */
+#define KVM_EOI_EVENTFD           _IOW(KVMIO,  0xa2, struct kvm_eoi)
 
 /*
  * ioctls for vcpu fds

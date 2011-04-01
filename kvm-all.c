@@ -1422,5 +1422,24 @@ int kvm_on_sigbus(int code, void *addr)
     return kvm_arch_on_sigbus(code, addr);
 }
 
+#if defined(KVM_EOI_EVENTFD)
+int kvm_eoi_eventfd(int gsi, int fd, uint32_t flags)
+{
+    struct kvm_eoi eoi = {
+        .fd = fd,
+        .gsi = gsi,
+        .flags = flags,
+    };
+    int r;
+
+    if (!kvm_enabled() || !kvm_irqchip_in_kernel())
+        return -ENOSYS;
+
+    r = kvm_vm_ioctl(kvm_state, KVM_EOI_EVENTFD, &eoi);
+    if (r < 0)
+        return r;
+    return 0;
+}
+#endif
 #undef PAGE_SIZE
 #include "qemu-kvm.c"
