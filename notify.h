@@ -40,4 +40,6 @@ void notifier_list_remove(NotifierList *list, Notifier *notifier);
 
 void notifier_list_notify(NotifierList *list);
 
+bool notifier_list_empty(NotifierList *list);
+
 #endif

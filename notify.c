@@ -37,3 +37,8 @@ void notifier_list_notify(NotifierList *list)
         notifier->notify(notifier);
     }
 }
+
+bool notifier_list_empty(NotifierList *list)
+{
+    return QTAILQ_EMPTY(&list->notifiers);
+}
