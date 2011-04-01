@@ -148,6 +148,7 @@ int msi_init(struct PCIDevice *dev, uint8_t offset,
     }
 
     dev->msi_cap = config_offset;
+    dev->msi_cap_size = cap_size;
     dev->cap_present |= QEMU_PCI_CAP_MSI;
 
     pci_set_word(dev->config + msi_flags_off(dev), flags);
@@ -170,14 +171,12 @@ int msi_init(struct PCIDevice *dev, uint8_t offset,
 
 void msi_uninit(struct PCIDevice *dev)
 {
-    uint8_t cap_size;
-
     if (!(dev->cap_present & QEMU_PCI_CAP_MSI))
         return;
 
-    cap_size = msi_cap_sizeof(pci_get_word(dev->config + msi_flags_off(dev)));
-    pci_del_capability(dev, PCI_CAP_ID_MSIX, cap_size);
+    pci_del_capability(dev, PCI_CAP_ID_MSIX, dev->msi_cap_size);
     dev->msi_cap = 0;
+    dev->msi_cap_size = 0;
     dev->cap_present &= ~QEMU_PCI_CAP_MSI;
     MSI_DEV_PRINTF(dev, "uninit\n");
 }
@@ -268,7 +267,7 @@ void msi_write_config(PCIDevice *dev, uint32_t addr, uint32_t val, int len)
     unsigned int vector;
     uint32_t pending;
 
-    if (!ranges_overlap(addr, len, dev->msi_cap, msi_cap_sizeof(flags))) {
+    if (!ranges_overlap(addr, len, dev->msi_cap, dev->msi_cap_size)) {
         return;
     }
 

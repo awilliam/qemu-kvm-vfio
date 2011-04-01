@@ -192,8 +192,9 @@ struct PCIDevice {
     /* Version id needed for VMState */
     int32_t version_id;
 
-    /* Offset of MSI capability in config space */
+    /* Offset & size of MSI capability in config space */
     uint8_t msi_cap;
+    uint8_t msi_cap_size;
 
     /* PCI Express */
     PCIExpressDevice exp;
