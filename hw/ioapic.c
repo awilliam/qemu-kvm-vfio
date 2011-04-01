@@ -31,6 +31,10 @@
 
 #include "kvm.h"
 
+#if defined(KVM_CAP_IRQCHIP) && defined(TARGET_I386)
+#include "event_notifier.h"
+#endif
+
 //#define DEBUG_IOAPIC
 
 #ifdef DEBUG_IOAPIC
@@ -85,6 +89,13 @@
 
 #define IOAPIC_VER_ENTRIES_SHIFT        16
 
+struct IOAPIC_EOI {
+    NotifierList notifier;
+#if defined(KVM_CAP_IRQCHIP) && defined(TARGET_I386)
+    EventNotifier event;
+#endif
+};
+
 typedef struct IOAPICState IOAPICState;
 
 struct IOAPICState {
@@ -94,7 +105,7 @@ struct IOAPICState {
     uint32_t irr;
     uint64_t ioredtbl[IOAPIC_NUM_PINS];
     uint32_t gsi_base;
-    NotifierList eoi_notifiers[IOAPIC_NUM_PINS];
+    struct IOAPIC_EOI eoi[IOAPIC_NUM_PINS];
 };
 
 static IOAPICState *ioapics[MAX_IOAPICS];
@@ -193,11 +204,55 @@ void ioapic_eoi_broadcast(int vector)
                 if (!(entry & IOAPIC_LVT_MASKED) && (s->irr & (1 << n))) {
                     ioapic_service(s);
                 }
-                notifier_list_notify(&s->eoi_notifiers[n]);
+                notifier_list_notify(&s->eoi[n].notifier);
             }
         }
     }
 }
+
+#if defined(KVM_CAP_IRQCHIP) && defined(TARGET_I386)
+static void kvm_kernel_ioapic_eoi(void *opaque)
+{
+    struct IOAPIC_EOI *eoi = opaque;
+
+    if (!event_notifier_test_and_clear(&eoi->event)) {
+        return;
+    }
+
+    notifier_list_notify(&eoi->notifier);
+}
+
+static void kvm_kernel_ioapic_enable_eoi(IOAPICState *s, uint32_t gsi)
+{
+    uint32_t pin = gsi - s->gsi_base;
+    int fd;
+
+    if (event_notifier_init(&s->eoi[pin].event, 0)) {
+        fprintf(stderr, "%s notifier init failed\n", __FUNCTION__);
+        return;
+    }
+
+    fd = event_notifier_get_fd(&s->eoi[pin].event);
+    qemu_set_fd_handler(fd, kvm_kernel_ioapic_eoi, NULL, &s->eoi[pin]);
+
+    if (kvm_eoi_eventfd(gsi, fd, 0)) {
+        fprintf(stderr, "%s eoi eventfd failed\n", __FUNCTION__);
+    }
+}
+
+static void kvm_kernel_ioapic_disable_eoi(IOAPICState *s, uint32_t gsi)
+{
+    uint32_t pin = gsi - s->gsi_base;
+    int fd;
+
+    fd = event_notifier_get_fd(&s->eoi[pin].event);
+    if (kvm_eoi_eventfd(gsi, fd, KVM_EOI_EVENTFD_FLAG_DEASSIGN)) {
+        fprintf(stderr, "%s eoi eventfd failed\n", __FUNCTION__);
+    }
+    qemu_set_fd_handler(fd, NULL, NULL, &s->eoi[pin]);
+    event_notifier_cleanup(&s->eoi[pin].event);
+}
+#endif
 
 static void ioapic_update_gsi_eoi_notifier(Notifier *notify, uint32_t gsi,
                                            bool add)
@@ -220,9 +275,23 @@ static void ioapic_update_gsi_eoi_notifier(Notifier *notify, uint32_t gsi,
         }
 
         if (add) {
-            notifier_list_add(&s->eoi_notifiers[pin], notify);
+#if defined(KVM_CAP_IRQCHIP) && defined(TARGET_I386)
+            if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+                if (notifier_list_empty(&s->eoi[pin].notifier)) {
+                    kvm_kernel_ioapic_enable_eoi(s, gsi);
+                }
+            }
+#endif 
+            notifier_list_add(&s->eoi[pin].notifier, notify);
         } else {
-            notifier_list_remove(&s->eoi_notifiers[pin], notify);
+            notifier_list_remove(&s->eoi[pin].notifier, notify);
+#if defined(KVM_CAP_IRQCHIP) && defined(TARGET_I386)
+            if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+                if (notifier_list_empty(&s->eoi[pin].notifier)) {
+                    kvm_kernel_ioapic_disable_eoi(s, gsi);
+                }
+            }
+#endif 
         }
         return;
     }
@@ -446,7 +515,7 @@ static int ioapic_init1(SysBusDevice *dev)
     ioapics[ioapic_no++] = s;
 
     for (i = 0 ; i < IOAPIC_NUM_PINS; i++) {
-        notifier_list_init(&s->eoi_notifiers[i]);
+        notifier_list_init(&s->eoi[i].notifier);
     }
 
     return 0;
